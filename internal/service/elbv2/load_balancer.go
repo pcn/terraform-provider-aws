@@ -53,6 +53,8 @@ func resourceLoadBalancer() *schema.Resource {
 			customizeDiffLoadBalancerALB,
 			customizeDiffLoadBalancerNLB,
 			customizeDiffLoadBalancerGWLB,
+			validateLoadBalancerIPv6SourceNat,
+			customizeDiffLoadBalancerIPv6SourceNat,
 		),
 
 		Timeouts: &schema.ResourceTimeout{
@@ -203,6 +205,12 @@ func resourceLoadBalancer() *schema.Resource {
 				Optional:         true,
 				Default:          false,
 				DiffSuppressFunc: suppressIfLBTypeNot(awstypes.LoadBalancerTypeEnumApplication, awstypes.LoadBalancerTypeEnumNetwork),
+			},
+			"enable_prefix_for_ipv6_source_nat": {
+				Type:             schema.TypeBool,
+				Optional:         true,
+				Default:          false,
+				DiffSuppressFunc: suppressIfLBTypeNot(awstypes.LoadBalancerTypeEnumNetwork),
 			},
 			"enforce_security_group_inbound_rules_on_private_link_traffic": {
 				Type:             schema.TypeString,
@@ -888,6 +896,11 @@ var loadBalancerAttributes = loadBalancerAttributeMap(map[string]loadBalancerAtt
 		tfType:                     schema.TypeBool,
 		loadBalancerTypesSupported: []awstypes.LoadBalancerTypeEnum{awstypes.LoadBalancerTypeEnumApplication, awstypes.LoadBalancerTypeEnumNetwork},
 	},
+	"enable_prefix_for_ipv6_source_nat": {
+		apiAttributeKey:            loadBalancerAttributeIPv6EnablePrefixSourceNat,
+		tfType:                     schema.TypeBool,
+		loadBalancerTypesSupported: []awstypes.LoadBalancerTypeEnum{awstypes.LoadBalancerTypeEnumNetwork},
+	},
 	"idle_timeout": {
 		apiAttributeKey:            loadBalancerAttributeIdleTimeoutTimeoutSeconds,
 		tfType:                     schema.TypeInt,
@@ -1425,6 +1438,45 @@ func customizeDiffLoadBalancerGWLB(_ context.Context, diff *schema.ResourceDiff,
 
 	if diff.Id() == "" {
 		return nil
+	}
+
+	return nil
+}
+
+// Validate that enable_prefix_for_ipv6_source_nat can only be true when ip_address_type is "dualstack"
+func validateLoadBalancerIPv6SourceNat(_ context.Context, diff *schema.ResourceDiff, v any) error {
+	if enablePrefix, ok := diff.GetOk("enable_prefix_for_ipv6_source_nat"); ok && enablePrefix.(bool) {
+		if ipAddressType := diff.Get(names.AttrIPAddressType).(string); ipAddressType != "dualstack" {
+			return fmt.Errorf("enable_prefix_for_ipv6_source_nat can only be true when ip_address_type is \"dualstack\"")
+		}
+	}
+	return nil
+}
+
+// Handle conditional ForceNew behavior for enable_prefix_for_ipv6_source_nat
+func customizeDiffLoadBalancerIPv6SourceNat(_ context.Context, diff *schema.ResourceDiff, v any) error {
+	// Skip validation during creation
+	if diff.Id() == "" {
+		return nil
+	}
+
+	// Only proceed if enable_prefix_for_ipv6_source_nat is changing
+	if !diff.HasChange("enable_prefix_for_ipv6_source_nat") {
+		return nil
+	}
+
+	// Check if ip_address_type is also changing from ipv4 to dualstack
+	if diff.HasChange(names.AttrIPAddressType) {
+		oldIPType, newIPType := diff.GetChange(names.AttrIPAddressType)
+		if oldIPType.(string) == "ipv4" && newIPType.(string) == "dualstack" {
+			// Allow the change when transitioning from ipv4 to dualstack
+			return nil
+		}
+	}
+
+	// In all other cases, force recreation
+	if err := diff.ForceNew("enable_prefix_for_ipv6_source_nat"); err != nil {
+		return err
 	}
 
 	return nil

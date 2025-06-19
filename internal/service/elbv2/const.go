@@ -45,6 +45,7 @@ const (
 
 	// The following attributes are supported by only Network Load Balancers:
 	loadBalancerAttributeDNSRecordClientRoutingPolicy = "dns_record.client_routing_policy"
+	loadBalancerAttributeIPv6EnablePrefixSourceNat    = "ipv6.enable_prefix_source_nat"
 )
 
 const (

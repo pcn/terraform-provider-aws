@@ -3641,3 +3641,202 @@ resource "aws_lb" "test" {
 }
 `, rName, unit))
 }
+
+func TestAccELBV2LoadBalancer_enablePrefixForIPv6SourceNat_basic(t *testing.T) {
+	ctx := acctest.Context(t)
+	var conf awstypes.LoadBalancer
+	rName := sdkacctest.RandomWithPrefix(acctest.ResourcePrefix)
+	resourceName := "aws_lb.test"
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { acctest.PreCheck(ctx, t) },
+		ErrorCheck:               acctest.ErrorCheck(t, names.ELBV2ServiceID),
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories,
+		CheckDestroy:             testAccCheckLoadBalancerDestroy(ctx),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccLoadBalancerConfig_enablePrefixForIPv6SourceNat(rName, true),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					testAccCheckLoadBalancerExists(ctx, resourceName, &conf),
+					resource.TestCheckResourceAttr(resourceName, "enable_prefix_for_ipv6_source_nat", acctest.CtTrue),
+					resource.TestCheckResourceAttr(resourceName, names.AttrIPAddressType, "dualstack"),
+					resource.TestCheckResourceAttr(resourceName, "load_balancer_type", "network"),
+				),
+			},
+			{
+				ResourceName:      resourceName,
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+func TestAccELBV2LoadBalancer_enablePrefixForIPv6SourceNat_false(t *testing.T) {
+	ctx := acctest.Context(t)
+	var conf awstypes.LoadBalancer
+	rName := sdkacctest.RandomWithPrefix(acctest.ResourcePrefix)
+	resourceName := "aws_lb.test"
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { acctest.PreCheck(ctx, t) },
+		ErrorCheck:               acctest.ErrorCheck(t, names.ELBV2ServiceID),
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories,
+		CheckDestroy:             testAccCheckLoadBalancerDestroy(ctx),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccLoadBalancerConfig_enablePrefixForIPv6SourceNat(rName, false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					testAccCheckLoadBalancerExists(ctx, resourceName, &conf),
+					resource.TestCheckResourceAttr(resourceName, "enable_prefix_for_ipv6_source_nat", acctest.CtFalse),
+					resource.TestCheckResourceAttr(resourceName, names.AttrIPAddressType, "dualstack"),
+					resource.TestCheckResourceAttr(resourceName, "load_balancer_type", "network"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccELBV2LoadBalancer_enablePrefixForIPv6SourceNat_invalidIPv4(t *testing.T) {
+	rName := sdkacctest.RandomWithPrefix(acctest.ResourcePrefix)
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { acctest.PreCheck(acctest.Context(t), t) },
+		ErrorCheck:               acctest.ErrorCheck(t, names.ELBV2ServiceID),
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories,
+		CheckDestroy:             testAccCheckLoadBalancerDestroy(acctest.Context(t)),
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccLoadBalancerConfig_enablePrefixForIPv6SourceNat_invalidIPv4(rName),
+				ExpectError: regexache.MustCompile(`enable_prefix_for_ipv6_source_nat can only be true when ip_address_type is "dualstack"`),
+			},
+		},
+	})
+}
+
+func TestAccELBV2LoadBalancer_enablePrefixForIPv6SourceNat_ipAddressTypeChange(t *testing.T) {
+	ctx := acctest.Context(t)
+	var conf1, conf2 awstypes.LoadBalancer
+	rName := sdkacctest.RandomWithPrefix(acctest.ResourcePrefix)
+	resourceName := "aws_lb.test"
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { acctest.PreCheck(ctx, t) },
+		ErrorCheck:               acctest.ErrorCheck(t, names.ELBV2ServiceID),
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories,
+		CheckDestroy:             testAccCheckLoadBalancerDestroy(ctx),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccLoadBalancerConfig_enablePrefixForIPv6SourceNat_ipv4Only(rName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					testAccCheckLoadBalancerExists(ctx, resourceName, &conf1),
+					resource.TestCheckResourceAttr(resourceName, names.AttrIPAddressType, "ipv4"),
+					resource.TestCheckResourceAttr(resourceName, "enable_prefix_for_ipv6_source_nat", acctest.CtFalse),
+				),
+			},
+			{
+				Config: testAccLoadBalancerConfig_enablePrefixForIPv6SourceNat(rName, true),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					testAccCheckLoadBalancerExists(ctx, resourceName, &conf2),
+					testAccCheckLoadBalancerNotRecreated(&conf1, &conf2), // Should NOT recreate
+					resource.TestCheckResourceAttr(resourceName, names.AttrIPAddressType, "dualstack"),
+					resource.TestCheckResourceAttr(resourceName, "enable_prefix_for_ipv6_source_nat", acctest.CtTrue),
+				),
+			},
+		},
+	})
+}
+
+func TestAccELBV2LoadBalancer_enablePrefixForIPv6SourceNat_forceRecreation(t *testing.T) {
+	ctx := acctest.Context(t)
+	var conf1, conf2 awstypes.LoadBalancer
+	rName := sdkacctest.RandomWithPrefix(acctest.ResourcePrefix)
+	resourceName := "aws_lb.test"
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { acctest.PreCheck(ctx, t) },
+		ErrorCheck:               acctest.ErrorCheck(t, names.ELBV2ServiceID),
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories,
+		CheckDestroy:             testAccCheckLoadBalancerDestroy(ctx),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccLoadBalancerConfig_enablePrefixForIPv6SourceNat(rName, false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					testAccCheckLoadBalancerExists(ctx, resourceName, &conf1),
+					resource.TestCheckResourceAttr(resourceName, names.AttrIPAddressType, "dualstack"),
+					resource.TestCheckResourceAttr(resourceName, "enable_prefix_for_ipv6_source_nat", acctest.CtFalse),
+				),
+			},
+			{
+				Config: testAccLoadBalancerConfig_enablePrefixForIPv6SourceNat(rName, true),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					testAccCheckLoadBalancerExists(ctx, resourceName, &conf2),
+					testAccCheckLoadBalancerRecreated(&conf1, &conf2), // Should recreate
+					resource.TestCheckResourceAttr(resourceName, names.AttrIPAddressType, "dualstack"),
+					resource.TestCheckResourceAttr(resourceName, "enable_prefix_for_ipv6_source_nat", acctest.CtTrue),
+				),
+			},
+		},
+	})
+}
+
+func testAccLoadBalancerConfig_enablePrefixForIPv6SourceNat(rName string, enabled bool) string {
+	return acctest.ConfigCompose(acctest.ConfigVPCWithSubnetsIPv6(rName, 2), fmt.Sprintf(`
+resource "aws_internet_gateway" "test" {
+  vpc_id = aws_vpc.test.id
+
+  tags = {
+    Name = %[1]q
+  }
+}
+
+resource "aws_lb" "test" {
+  name               = %[1]q
+  load_balancer_type = "network"
+  ip_address_type    = "dualstack"
+  subnets            = aws_subnet.test[*].id
+
+  enable_prefix_for_ipv6_source_nat = %[2]t
+
+  tags = {
+    Name = %[1]q
+  }
+
+  depends_on = [aws_internet_gateway.test]
+}
+`, rName, enabled))
+}
+
+func testAccLoadBalancerConfig_enablePrefixForIPv6SourceNat_invalidIPv4(rName string) string {
+	return acctest.ConfigCompose(acctest.ConfigVPCWithSubnets(rName, 2), fmt.Sprintf(`
+resource "aws_lb" "test" {
+  name               = %[1]q
+  load_balancer_type = "network"
+  ip_address_type    = "ipv4"  # This should cause validation error
+  subnets            = aws_subnet.test[*].id
+
+  enable_prefix_for_ipv6_source_nat = true  # Invalid with ipv4
+
+  tags = {
+    Name = %[1]q
+  }
+}
+`, rName))
+}
+
+func testAccLoadBalancerConfig_enablePrefixForIPv6SourceNat_ipv4Only(rName string) string {
+	return acctest.ConfigCompose(acctest.ConfigVPCWithSubnets(rName, 2), fmt.Sprintf(`
+resource "aws_lb" "test" {
+  name               = %[1]q
+  load_balancer_type = "network"
+  ip_address_type    = "ipv4"
+  subnets            = aws_subnet.test[*].id
+
+  enable_prefix_for_ipv6_source_nat = false
+
+  tags = {
+    Name = %[1]q
+  }
+}
+`, rName))
+}
